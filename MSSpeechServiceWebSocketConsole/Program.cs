@@ -36,7 +36,7 @@
 
 // Comment the following line if you want to use the old Bing Speech SDK
 // instead of the new Speech Service.
-//#define USENEWSPEECHSDK
+#define USENEWSPEECHSDK
 
 using System;
 using System.Collections.Generic;
@@ -64,30 +64,39 @@ namespace MSSpeechServiceWebSocketConsole
             {
                 var recoService = new SpeechRecognitionService();
                 // Replace this with your own file. Add it to the project and mark it as "Content" and "Copy if newer".
-                var audioFilePath = @"Thisisatest.wav";
+                string audioFilePath = @"Thisisatest.wav";
 
                 // The key below is a trial key and will either expire soon or get invalidated. Please get your own key.
                 // Get your own trial key to Bing Speech or the new Speech Service at https://azure.microsoft.com/try/cognitive-services
                 // Create an Azure Cognitive Services Account: https://docs.microsoft.com/azure/cognitive-services/cognitive-services-apis-create-account
-                var authenticationKey = @"8bd450f1edc143febd45c28d85c3ee7d";
+#if USENEWSPEECHSDK
+                string authenticationKey = @"f69d77d425e946e69a954c53db135f77";
+#else
+                string authenticationKey = @"8bd450f1edc143febd45c28d85c3ee7d";
+#endif
+            // Make sure to match the region to the Azure region where you created the service.
+            // Note the region is NOT used for the old Bing Speech service
+            string region = "westus";
 
-                await recoService.CreateSpeechRecognitionJob(audioFilePath, authenticationKey);
+
+        await recoService.CreateSpeechRecognitionJob(audioFilePath, authenticationKey, region);
             }).Wait();
         }
     }
 
     public class SpeechRecognitionService
     {
-        public async Task<int?> CreateSpeechRecognitionJob(string audioFilePath, string authenticationKeyStr)
+        public async Task<int?> CreateSpeechRecognitionJob(string audioFilePath, string authenticationKeyStr, string region)
         {
-            var authenticationKey = new CogSvcSocketAuthentication(authenticationKeyStr);
+            var authenticationKey = new CogSvcSocketAuthentication(authenticationKeyStr, region);
             string token = authenticationKey.GetAccessToken();
 
             // Configuring Speech Service Web Socket client header
-            Console.WriteLine("Connecting to Speech Service Web Socket.");
+            Console.WriteLine("Connecting to Speech Service via Web Socket.");
             ClientWebSocket websocketClient = new ClientWebSocket();
-            var connectionId = Guid.NewGuid().ToString("N");
-            var lang = "en-US";
+            string connectionId = Guid.NewGuid().ToString("N");
+            // Make sure to change the region & culture to match your recorded audio file.
+            string lang = "en-US";
             websocketClient.Options.SetRequestHeader("X-ConnectionId", connectionId);
             websocketClient.Options.SetRequestHeader("Authorization", "Bearer " + token);
 
@@ -97,8 +106,8 @@ namespace MSSpeechServiceWebSocketConsole
             //  - conversation
             //  - dictation
 #if USENEWSPEECHSDK
-            // New Speech Service endpoint.
-            var url = $"wss://westus.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?format=simple&language={lang}";
+            // New Speech Service endpoint. 
+            var url = $"wss://{region}.stt.speech.microsoft.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
 #else
             // Bing Speech endpoint
             var url = $"wss://speech.platform.bing.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
@@ -247,10 +256,10 @@ namespace MSSpeechServiceWebSocketConsole
 
                 var res = Encoding.UTF8.GetString(buffer, 0, result.Count);
 
-                // Incoming text messages can be hypotheses about the words the service recognized or the final
-                // phrase, which is a recognition result that won't change.
                 switch (result.MessageType)
                 {
+                    // Incoming text messages can be hypotheses about the words the service recognized or the final
+                    // phrase, which is a recognition result that won't change.
                     case WebSocketMessageType.Text:
                         Console.WriteLine(Encoding.UTF8.GetString(buffer, 0, result.Count));
                         break;
@@ -277,8 +286,7 @@ namespace MSSpeechServiceWebSocketConsole
         // 
         public class CogSvcSocketAuthentication
         {
-            // This is the same Uri for the Bing Speech service and the new Speech Service
-            public static readonly string AuthenticationUri = "https://api.cognitive.microsoft.com/sts/v1.0";
+            public static string AuthenticationUri;
             private string subscriptionKey;
             private string token;
             private Timer accessTokenRenewer;
@@ -286,8 +294,16 @@ namespace MSSpeechServiceWebSocketConsole
             //Access token expires every 10 minutes. Renew it every 9 minutes.
             private const int RefreshTokenDuration = 9;
 
-            public CogSvcSocketAuthentication(string subscriptionKey)
+            public CogSvcSocketAuthentication(string subscriptionKey, string region)
             {
+                // Important: The Bing Speech service and the new Speech Service DO NOT use the same Uri
+#if USENEWSPEECHSDK
+                AuthenticationUri = $"https://{region}.api.cognitive.microsoft.com/sts/v1.0";
+#else
+                // The region is ignored for the old Bing Speech service
+                AuthenticationUri = "https://api.cognitive.microsoft.com/sts/v1.0";
+#endif
+
                 this.subscriptionKey = subscriptionKey;
                 this.token = FetchToken(AuthenticationUri, subscriptionKey).Result;
 
