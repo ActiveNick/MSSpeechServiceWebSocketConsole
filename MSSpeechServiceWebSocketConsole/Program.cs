@@ -188,21 +188,12 @@ namespace MSSpeechServiceWebSocketConsole
                     FileInfo audioFileInfo = new FileInfo(audioFilePath);
                     FileStream audioFileStream = audioFileInfo.OpenRead();
 
+                    byte[] headerBytes;
+                    byte[] headerHead;
                     for (int cursor = 0; cursor < audioFileInfo.Length; cursor++)
                     {
-                        // Clients use the audio message to send an audio chunk to the service.
-                        speechMsgBuilder.Clear();
-                        speechMsgBuilder.Append("path:audio" + Environment.NewLine);
-                        speechMsgBuilder.Append($"x-requestid:{requestId}" + Environment.NewLine);
-                        speechMsgBuilder.Append($"x-timestamp:{DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffK")}" + Environment.NewLine);
-                        speechMsgBuilder.Append($"content-type:audio/x-wav");
-
-                        var headerBytes = Encoding.ASCII.GetBytes(speechMsgBuilder.ToString());
-                        var headerbuffer = new ArraySegment<byte>(headerBytes, 0, headerBytes.Length);
-                        var str = "0x" + (headerBytes.Length).ToString("X");
-                        var headerHeadBytes = BitConverter.GetBytes((UInt16)headerBytes.Length);
-                        var isBigEndian = !BitConverter.IsLittleEndian;
-                        var headerHead = !isBigEndian ? new byte[] { headerHeadBytes[1], headerHeadBytes[0] } : new byte[] { headerHeadBytes[0], headerHeadBytes[1] };
+                        headerBytes = BuildAudioHeader(requestId);
+                        headerHead = CreateAudioHeaderHead(headerBytes);
 
                         // PCM audio must be sampled at 16 kHz with 16 bits per sample and one channel (riff-16khz-16bit-mono-pcm).
                         var byteLen = 8192 - headerBytes.Length - 2;
@@ -221,7 +212,12 @@ namespace MSSpeechServiceWebSocketConsole
 
                         var dt = Encoding.ASCII.GetString(arr);
                     }
-                    await websocketClient.SendAsync(new ArraySegment<byte>(), WebSocketMessageType.Binary, true, new CancellationToken());
+                    // Send an audio message with a zero-length body. This message tells the service that the client knows
+                    // that the user stopped speaking, the utterance is finished, and the microphone is turned off
+                    headerBytes = BuildAudioHeader(requestId);
+                    headerHead = CreateAudioHeaderHead(headerBytes);
+                    var arrEnd = headerHead.Concat(headerBytes).ToArray();
+                    await websocketClient.SendAsync(new ArraySegment<byte>(arrEnd, 0, arrEnd.Length), WebSocketMessageType.Binary, true, new CancellationToken());
                     audioFileStream.Dispose();
 
                     {
@@ -254,6 +250,28 @@ namespace MSSpeechServiceWebSocketConsole
                 Console.WriteLine("An exception occurred during creation of Speech Recognition job:" + Environment.NewLine + ex.Message);
                 return null;
             }
+        }
+
+        private byte[] BuildAudioHeader(string requestid)
+        {
+            StringBuilder speechMsgBuilder = new StringBuilder();
+            // Clients use the audio message to send an audio chunk to the service.
+            speechMsgBuilder.Append("path:audio" + Environment.NewLine);
+            speechMsgBuilder.Append($"x-requestid:{requestid}" + Environment.NewLine);
+            speechMsgBuilder.Append($"x-timestamp:{DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffK")}" + Environment.NewLine);
+            speechMsgBuilder.Append($"content-type:audio/x-wav");
+
+            return Encoding.ASCII.GetBytes(speechMsgBuilder.ToString());
+        }
+
+        private byte[] CreateAudioHeaderHead(byte[] headerBytes)
+        {
+            var headerbuffer = new ArraySegment<byte>(headerBytes, 0, headerBytes.Length);
+            var str = "0x" + (headerBytes.Length).ToString("X");
+            var headerHeadBytes = BitConverter.GetBytes((UInt16)headerBytes.Length);
+            var isBigEndian = !BitConverter.IsLittleEndian;
+            var headerHead = !isBigEndian ? new byte[] { headerHeadBytes[1], headerHeadBytes[0] } : new byte[] { headerHeadBytes[0], headerHeadBytes[1] };
+            return headerHead;
         }
 
         // Allows the WebSocket client to receive messages in a background task
