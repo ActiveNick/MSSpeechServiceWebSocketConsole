@@ -219,15 +219,6 @@ namespace MSSpeechServiceWebSocketConsole
                     var arrEnd = headerHead.Concat(headerBytes).ToArray();
                     await websocketClient.SendAsync(new ArraySegment<byte>(arrEnd, 0, arrEnd.Length), WebSocketMessageType.Binary, true, new CancellationToken());
                     audioFileStream.Dispose();
-
-                    {
-                        var startWait = DateTime.UtcNow;
-                        while ((DateTime.UtcNow - startWait).TotalSeconds < 30)
-                        {
-                            await Task.Delay(1);
-                        }
-                        if (websocketClient.State != WebSocketState.Open) return;
-                    }
                 });
 
                 // Wait for tasks to complete
