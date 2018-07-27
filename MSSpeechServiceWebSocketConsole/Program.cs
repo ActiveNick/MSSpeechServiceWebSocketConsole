@@ -74,12 +74,12 @@ namespace MSSpeechServiceWebSocketConsole
 #else
                 string authenticationKey = @"8bd450f1edc143febd45c28d85c3ee7d";
 #endif
-            // Make sure to match the region to the Azure region where you created the service.
-            // Note the region is NOT used for the old Bing Speech service
-            string region = "westus";
+                // Make sure to match the region to the Azure region where you created the service.
+                // Note the region is NOT used for the old Bing Speech service
+                string region = "westus";
 
 
-        await recoService.CreateSpeechRecognitionJob(audioFilePath, authenticationKey, region);
+                await recoService.CreateSpeechRecognitionJob(audioFilePath, authenticationKey, region);
             }).Wait();
         }
     }
@@ -246,22 +246,23 @@ namespace MSSpeechServiceWebSocketConsole
         // Allows the WebSocket client to receive messages in a background task
         private static async Task Receiving(ClientWebSocket client)
         {
-            var buffer = new byte[128];
+            var buffer = new byte[512];
             bool isReceiving = true;
 
             while (isReceiving)
             {
 
-                var result = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                var wsResult = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
-                var res = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                var resStr = Encoding.UTF8.GetString(buffer, 0, wsResult.Count) + 
+                    Environment.NewLine + "*** Message End ***" + Environment.NewLine;
 
-                switch (result.MessageType)
+                switch (wsResult.MessageType)
                 {
                     // Incoming text messages can be hypotheses about the words the service recognized or the final
                     // phrase, which is a recognition result that won't change.
                     case WebSocketMessageType.Text:
-                        Console.WriteLine(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                        Console.WriteLine(resStr); //Encoding.UTF8.GetString(buffer, 0, wsResult.Count));
                         break;
                     case WebSocketMessageType.Binary:
                         Console.WriteLine("Binary messages are not suppported by this application.");
