@@ -34,10 +34,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-// Comment the following line if you want to use the old Bing Speech SDK
-// instead of the new Speech Service.
-#define USENEWSPEECHSDK
-
 using System;
 using System.Net.Http;
 using System.Threading;
@@ -47,6 +43,8 @@ namespace SpeechRecognitionService
 {
     public class CogSvcSocketAuthentication
     {
+        bool useClassicBingSpeechService = false;
+
         public static string AuthenticationUri;
         private string subscriptionKey;
         private string token;
@@ -55,17 +53,22 @@ namespace SpeechRecognitionService
         //Access token expires every 10 minutes. Renew it every 9 minutes.
         private const int RefreshTokenDuration = 9;
 
-        public CogSvcSocketAuthentication(string subscriptionKey, string region)
+        // Set usebingspeechservice to true in  the client constructor if you want to use the old Bing Speech SDK
+        // instead of the new Speech Service.
+        public CogSvcSocketAuthentication(string subscriptionKey, string region, bool usebingspeechservice = false)
         {
             try
             {
                 // Important: The Bing Speech service and the new Speech Service DO NOT use the same Uri
-#if USENEWSPEECHSDK
+                if (!useClassicBingSpeechService)
+                {
                     AuthenticationUri = $"https://{region}.api.cognitive.microsoft.com/sts/v1.0";
-#else
-                // The region is ignored for the old Bing Speech service
-                AuthenticationUri = "https://api.cognitive.microsoft.com/sts/v1.0";
-#endif
+                }
+                else
+                {
+                    // The region is ignored for the old Bing Speech service
+                    AuthenticationUri = "https://api.cognitive.microsoft.com/sts/v1.0";
+                }
 
                 this.subscriptionKey = subscriptionKey;
                 this.token = FetchToken(AuthenticationUri, subscriptionKey).Result;

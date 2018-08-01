@@ -36,7 +36,6 @@
 
 namespace SpeechRecognitionService
 {
-
     public class SpeechRecognitionResult
     {
         public string RecognitionStatus { get; set; }
@@ -44,5 +43,4 @@ namespace SpeechRecognitionService
         public int Offset { get; set; }
         public int Duration { get; set; }
     }
-
 }

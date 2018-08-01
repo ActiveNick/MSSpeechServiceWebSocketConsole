@@ -34,15 +34,9 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-// Comment the following line if you want to use the old Bing Speech SDK
-// instead of the new Speech Service.
-#define USENEWSPEECHSDK
-
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -53,11 +47,20 @@ namespace SpeechRecognitionService
 {
     public class SpeechRecognitionClient
     {
+        bool useClassicBingSpeechService = false;
+
+        public SpeechRecognitionClient(bool usebingspeechservice = false)
+        {
+            // Set usebingspeechservice to true in  the client constructor if you want to use the old Bing Speech SDK
+            // instead of the new Speech Service.
+            useClassicBingSpeechService = usebingspeechservice;
+        }
+
         public async Task<int?> CreateSpeechRecognitionJob(string audioFilePath, string authenticationKeyStr, string region)
         {
             try
             {
-                var authenticationKey = new CogSvcSocketAuthentication(authenticationKeyStr, region);
+                var authenticationKey = new CogSvcSocketAuthentication(authenticationKeyStr, region, useClassicBingSpeechService);
                 string token = authenticationKey.GetAccessToken();
 
                 // Configuring Speech Service Web Socket client header
@@ -74,13 +77,18 @@ namespace SpeechRecognitionService
                 //  - interactive
                 //  - conversation
                 //  - dictation
-#if USENEWSPEECHSDK
-                // New Speech Service endpoint. 
-                var url = $"wss://{region}.stt.speech.microsoft.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
-#else
-                // Bing Speech endpoint
-                var url = $"wss://speech.platform.bing.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
-#endif
+                var url = "";
+                if (!useClassicBingSpeechService)
+                {
+                    // New Speech Service endpoint. 
+                    url = $"wss://{region}.stt.speech.microsoft.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
+                }
+                else
+                {
+                    // Bing Speech endpoint
+                    url = $"wss://speech.platform.bing.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
+                }
+
                 await websocketClient.ConnectAsync(new Uri(url), new CancellationToken());
                 Console.WriteLine("Web Socket successfully connected.");
 
