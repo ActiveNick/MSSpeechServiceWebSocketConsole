@@ -36,11 +36,20 @@
 
 namespace SpeechRecognitionService
 {
-    public class SpeechRecognitionResult
+    public class RecognitionContent
     {
+        public Context context { get; set; }
         public string RecognitionStatus { get; set; }
+        // The Text field is used when a recognition hypothesis is produced
+        public string Text { get; set; }
+        // The Displaytext field is used when the final recognized phrase is produced
         public string DisplayText { get; set; }
         public int Offset { get; set; }
         public int Duration { get; set; }
+    }
+
+    public class Context
+    {
+        public string serviceTag { get; set; }
     }
 }

@@ -66,7 +66,9 @@ namespace SpeechRecognitionService
                 // Configuring Speech Service Web Socket client header
                 Console.WriteLine("Connecting to Speech Service via Web Socket.");
                 ClientWebSocket websocketClient = new ClientWebSocket();
+
                 string connectionId = Guid.NewGuid().ToString("N");
+                
                 // Make sure to change the region & culture to match your recorded audio file.
                 string lang = "en-US";
                 websocketClient.Options.SetRequestHeader("X-ConnectionId", connectionId);
@@ -246,16 +248,17 @@ namespace SpeechRecognitionService
                 {
 
                     var wsResult = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    SpeechServiceResult wssr;
 
-                    var resStr = Encoding.UTF8.GetString(buffer, 0, wsResult.Count) +
-                        Environment.NewLine + "*** Message End ***" + Environment.NewLine;
+                    var resStr = Encoding.UTF8.GetString(buffer, 0, wsResult.Count);
 
                     switch (wsResult.MessageType)
                     {
                         // Incoming text messages can be hypotheses about the words the service recognized or the final
                         // phrase, which is a recognition result that won't change.
                         case WebSocketMessageType.Text:
-                            Console.WriteLine(resStr); //Encoding.UTF8.GetString(buffer, 0, wsResult.Count));
+                            wssr = ParseWebSocketSpeechResult(resStr);
+                            Console.WriteLine(resStr + Environment.NewLine + "*** Message End ***" + Environment.NewLine);
                             break;
                         case WebSocketMessageType.Binary:
                             Console.WriteLine("Binary messages are not suppported by this application.");
@@ -263,7 +266,7 @@ namespace SpeechRecognitionService
                         case WebSocketMessageType.Close:
                             string description = client.CloseStatusDescription;
                             Console.WriteLine($"Closing WebSocket with Status: {description}");
-                            //await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                            await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
                             isReceiving = false;
                             break;
                         default:
@@ -280,6 +283,118 @@ namespace SpeechRecognitionService
         public static UInt16 ReverseBytes(UInt16 value)
         {
             return (UInt16)((value & 0xFFU) << 8 | (value & 0xFF00U) >> 8);
+        }
+
+        static SpeechServiceResult ParseWebSocketSpeechResult(string result)
+        {
+            SpeechServiceResult wssr = new SpeechServiceResult();
+
+            using (StringReader sr = new StringReader(result))
+            {
+                int linecount = 0;
+                string line;
+                bool isBodyStarted = false;
+                string bodyJSON = "";
+
+                // Parse each line in the WebSocket results to extra the headers and JSON body.
+                // The header is in the first 3 lines of the response, the rest is the body.
+                while ((line = sr.ReadLine()) != null)
+                {
+                    line = line.Trim();
+                    if (line.Length > 0)
+                    {
+                        switch (linecount)
+                        {
+                            case 0:  // X-RequestID
+                                if (line.Substring(0, 11).ToLower() == "x-requestid")
+                                {
+                                    wssr.RequestId = line.Substring(12);
+                                }
+                                break;
+
+                            case 1:  // Content-Type & charset on the same line, separated by a semi-colon
+                                var sublines = line.Split(new[] { ';' });
+
+                                if (sublines[0].Trim().Substring(0, 12).ToLower() == "content-type")
+                                {
+                                    wssr.ContentType = sublines[0].Trim().Substring(13);
+
+                                    if (sublines.Length > 1)
+                                    {
+                                        if (sublines[1].Trim().Substring(0, 7).ToLower() == "charset")
+                                        {
+                                            wssr.CharSet = sublines[1].Trim().Substring(8);
+
+                                        }
+                                    }
+                                }
+                                break;
+
+                            case 2:  // Path
+                                if (line.Substring(0, 4).ToLower() == "path")
+                                {
+                                    string pathStr = line.Substring(5).Trim().ToLower();
+                                    switch (pathStr)
+                                    {
+                                        case "turn.start":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.TurnStart;
+                                            break;
+                                        case "speech.startdetected":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.SpeechStartDetected;
+                                            break;
+                                        case "speech.hypothesis":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.SpeechHypothesis;
+                                            break;
+                                        case "speech.enddetected":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.SpeechEndDetected;
+                                            break;
+                                        case "speech.phrase":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.SpeechPhrase;
+                                            break;
+                                        case "turn.end":
+                                            wssr.Path = SpeechServiceResult.SpeechMessagePaths.SpeechEndDetected;
+                                            break;
+                                        default:
+                                            break;
+                                    }
+                                }
+                                break;
+
+                            default:
+                                if (!isBodyStarted)
+                                {
+                                    // For all non-empty lines past the first three (header), once we encounter an opening brace '{'
+                                    // we treat the rest of the response as the main results body which is formatted in JSON.
+                                    if (line.Substring(0, 1) == "{")
+                                    {
+                                        isBodyStarted = true;
+                                        bodyJSON += line + Environment.NewLine;
+                                    }
+                                }
+                                else
+                                {
+                                    bodyJSON += line + Environment.NewLine;
+                                }
+                                break;
+                        } 
+                    }
+
+                    linecount++;
+                }
+
+                // Once the full response has been parsed between header and body components,
+                // we need to parse the JSON content of the body itself.
+                if (bodyJSON.Length > 0)
+                {
+                    RecognitionContent srr = JsonConvert.DeserializeObject<RecognitionContent>(bodyJSON);
+                    if (srr != null)
+                    {
+                        wssr.Result = srr;
+                    }
+                }
+            }
+
+            return wssr;
         }
     }
 }
