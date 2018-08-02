@@ -36,7 +36,7 @@
 
 namespace SpeechRecognitionService
 {
-    class SpeechServiceResult
+    public class SpeechServiceResult
     {
         public enum SpeechMessagePaths { None, TurnStart, SpeechStartDetected, SpeechHypothesis, SpeechEndDetected, SpeechPhrase, TurnEnd };
 

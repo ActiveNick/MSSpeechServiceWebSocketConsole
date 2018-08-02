@@ -47,7 +47,16 @@ namespace SpeechRecognitionService
 {
     public class SpeechRecognitionClient
     {
+        // Public Fields
+        public string RecognizedText { get; set; }
+        public SpeechServiceResult LastMessageReceived { get; set; }
+
+        // Private fields
         bool useClassicBingSpeechService = false;
+
+        // Events Definition
+        public delegate void MessageReceived(SpeechServiceResult result);
+        public event MessageReceived OnMessageReceived;
 
         public SpeechRecognitionClient(bool usebingspeechservice = false)
         {
@@ -80,6 +89,7 @@ namespace SpeechRecognitionService
                 //  - conversation
                 //  - dictation
                 var url = "";
+                
                 if (!useClassicBingSpeechService)
                 {
                     // New Speech Service endpoint. 
@@ -237,7 +247,7 @@ namespace SpeechRecognitionService
         }
 
         // Allows the WebSocket client to receive messages in a background task
-        private static async Task Receiving(ClientWebSocket client)
+        private async Task Receiving(ClientWebSocket client)
         {
             try
             {
@@ -259,16 +269,37 @@ namespace SpeechRecognitionService
                         case WebSocketMessageType.Text:
                             wssr = ParseWebSocketSpeechResult(resStr);
                             Console.WriteLine(resStr + Environment.NewLine + "*** Message End ***" + Environment.NewLine);
+
+                            // Set the recognized text field in the client for future lookup, this can be stored
+                            // in either the Text property (for hypotheses) or DisplayText (for final phrases).
+                            if (wssr.Path == SpeechServiceResult.SpeechMessagePaths.SpeechHypothesis)
+                            {
+                                RecognizedText = wssr.Result.Text;
+                            }
+                            else if(wssr.Path == SpeechServiceResult.SpeechMessagePaths.SpeechPhrase)
+                            {
+                                RecognizedText = wssr.Result.DisplayText;
+                            }
+                            // Raise an event with the message we just received.
+                            // We also keep the last message received in case the client app didn't subscribe to the event.
+                            LastMessageReceived = wssr;
+                            if (OnMessageReceived != null)
+                            {
+                                OnMessageReceived.Invoke(wssr);
+                            }
                             break;
+
                         case WebSocketMessageType.Binary:
                             Console.WriteLine("Binary messages are not suppported by this application.");
                             break;
+
                         case WebSocketMessageType.Close:
                             string description = client.CloseStatusDescription;
                             Console.WriteLine($"Closing WebSocket with Status: {description}");
                             await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
                             isReceiving = false;
                             break;
+
                         default:
                             Console.WriteLine("The message type was not recognized.");
                             break;

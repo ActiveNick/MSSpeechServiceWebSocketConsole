@@ -81,12 +81,27 @@ namespace MSSpeechServiceWebSocketConsole
                     // Note the region is NOT used for the old Bing Speech service
                     string region = "westus";
 
+                    // Register an event to capture recognition events
+                    recoServiceClient.OnMessageReceived += RecoServiceClient_OnMessageReceived;
+
                     await recoServiceClient.CreateSpeechRecognitionJob(audioFilePath, authenticationKey, region);
                 }).Wait();
             }
             catch (Exception ex)
             {
                 Console.WriteLine("An exception occurred in the main program:" + Environment.NewLine + ex.Message);
+            }
+        }
+
+        private static void RecoServiceClient_OnMessageReceived(SpeechServiceResult result)
+        {
+            // Let's ignore all hypotheses and other messages for now and only report back on the final phrase
+            if (result.Path == SpeechServiceResult.SpeechMessagePaths.SpeechPhrase)
+            {
+                Console.WriteLine("*================================================================================");
+                Console.WriteLine("* RECOGNITION STATUS: " + result.Result.RecognitionStatus);
+                Console.WriteLine("* FINAL RESULT: " + result.Result.DisplayText);
+                Console.WriteLine("*================================================================================" + Environment.NewLine);
             }
         }
     }
