@@ -89,7 +89,6 @@ namespace SpeechRecognitionService
                 //  - conversation
                 //  - dictation
                 var url = "";
-                
                 if (!useClassicBingSpeechService)
                 {
                     // New Speech Service endpoint. 

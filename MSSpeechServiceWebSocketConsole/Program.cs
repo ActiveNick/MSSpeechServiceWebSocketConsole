@@ -39,15 +39,7 @@
 #define USENEWSPEECHSDK
 
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Net.WebSockets;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using SpeechRecognitionService;
 
 // Bing Speech API Web Socket protocol documentation available at
@@ -65,18 +57,27 @@ namespace MSSpeechServiceWebSocketConsole
             {
                 Task.Run(async () =>
                 {
-                    var recoServiceClient = new SpeechRecognitionClient();
+                    // If you see an API key below, it's a trial key and will either expire soon or get invalidated. Please get your own key.
+                    // Get your own trial key to Bing Speech or the new Speech Service at https://azure.microsoft.com/try/cognitive-services
+                    // Create an Azure Cognitive Services Account: https://docs.microsoft.com/azure/cognitive-services/cognitive-services-apis-create-account
+
+                    // DELETE THE NEXT THREE LINE ONCE YOU HAVE OBTAINED YOUR OWN SPEECH API KEY
+                    Console.WriteLine("You forgot to initialize the sample with your own Speech API key. Visit https://azure.microsoft.com/try/cognitive-services to get started.");
+                    Console.ReadLine();
+                    return;
+                    // END DELETE
+#if USENEWSPEECHSDK
+                    bool useClassicBingSpeechService = false;
+                    string authenticationKey = @"INSERT-YOUR-NEW-SPEECH-API-KEY-HERE";
+#else
+                    bool useClassicBingSpeechService = true;
+                    string authenticationKey = @"INSERT-YOUR-BING-SPEECH-API-KEY-HERE";
+#endif
+
+                    var recoServiceClient = new SpeechRecognitionClient(useClassicBingSpeechService);
                     // Replace this with your own file. Add it to the project and mark it as "Content" and "Copy if newer".
                     string audioFilePath = @"Thisisatest.wav";
 
-                    // The key below is a trial key and will either expire soon or get invalidated. Please get your own key.
-                    // Get your own trial key to Bing Speech or the new Speech Service at https://azure.microsoft.com/try/cognitive-services
-                    // Create an Azure Cognitive Services Account: https://docs.microsoft.com/azure/cognitive-services/cognitive-services-apis-create-account
-#if USENEWSPEECHSDK
-                    string authenticationKey = @"f69d77d425e946e69a954c53db135f77";
-#else
-                    string authenticationKey = @"8bd450f1edc143febd45c28d85c3ee7d";
-#endif
                     // Make sure to match the region to the Azure region where you created the service.
                     // Note the region is NOT used for the old Bing Speech service
                     string region = "westus";

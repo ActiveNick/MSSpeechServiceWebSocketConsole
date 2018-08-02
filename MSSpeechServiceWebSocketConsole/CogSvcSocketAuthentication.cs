@@ -43,8 +43,6 @@ namespace SpeechRecognitionService
 {
     public class CogSvcSocketAuthentication
     {
-        bool useClassicBingSpeechService = false;
-
         public static string AuthenticationUri;
         private string subscriptionKey;
         private string token;
@@ -54,13 +52,13 @@ namespace SpeechRecognitionService
         private const int RefreshTokenDuration = 9;
 
         // Set usebingspeechservice to true in  the client constructor if you want to use the old Bing Speech SDK
-        // instead of the new Speech Service.
+        // instead of the new Speech Service (new API is the default).
         public CogSvcSocketAuthentication(string subscriptionKey, string region, bool usebingspeechservice = false)
         {
             try
             {
                 // Important: The Bing Speech service and the new Speech Service DO NOT use the same Uri
-                if (!useClassicBingSpeechService)
+                if (!usebingspeechservice)
                 {
                     AuthenticationUri = $"https://{region}.api.cognitive.microsoft.com/sts/v1.0";
                 }
