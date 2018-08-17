@@ -37,7 +37,12 @@
 using System;
 using System.IO;
 using System.Linq;
+#if WINDOWS_UWP
+using Windows.Networking.Sockets;
+using Windows.Storage.Streams;
+#else
 using System.Net.WebSockets;
+#endif
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -74,14 +79,23 @@ namespace SpeechRecognitionService
 
                 // Configuring Speech Service Web Socket client header
                 Console.WriteLine("Connecting to Speech Service via Web Socket.");
+#if WINDOWS_UWP
+                MessageWebSocket websocketClient = new MessageWebSocket();
+#else
                 ClientWebSocket websocketClient = new ClientWebSocket();
+#endif
 
                 string connectionId = Guid.NewGuid().ToString("N");
                 
                 // Make sure to change the region & culture to match your recorded audio file.
                 string lang = "en-US";
+#if WINDOWS_UWP
+                websocketClient.SetRequestHeader("X-ConnectionId", connectionId);
+                websocketClient.SetRequestHeader("Authorization", "Bearer " + token);
+#else
                 websocketClient.Options.SetRequestHeader("X-ConnectionId", connectionId);
                 websocketClient.Options.SetRequestHeader("Authorization", "Bearer " + token);
+#endif
 
                 // Clients must use an appropriate endpoint of Speech Service. The endpoint is based on recognition mode and language.
                 // The supported recognition modes are:
@@ -100,10 +114,16 @@ namespace SpeechRecognitionService
                     url = $"wss://speech.platform.bing.com/speech/recognition/interactive/cognitiveservices/v1?format=simple&language={lang}";
                 }
 
-                await websocketClient.ConnectAsync(new Uri(url), new CancellationToken());
-                Console.WriteLine("Web Socket successfully connected.");
+#if WINDOWS_UWP
+                websocketClient.MessageReceived += WebSocket_MessageReceived;
+                websocketClient.Closed += WebSocket_Closed;
 
+                await websocketClient.ConnectAsync(new Uri(url));
+#else
+                await websocketClient.ConnectAsync(new Uri(url), new CancellationToken());
                 var receiving = Receiving(websocketClient);
+#endif
+                Console.WriteLine("Web Socket successfully connected.");
 
                 var sending = Task.Run(async () =>
                 {
@@ -152,11 +172,10 @@ namespace SpeechRecognitionService
                     var encoded = Encoding.UTF8.GetBytes(speechMsgBuilder.ToString());
                     var buffer = new ArraySegment<byte>(encoded, 0, encoded.Length);
 
-                    if (websocketClient.State != WebSocketState.Open) return;
-
-                    Console.WriteLine("Sending speech.config...");
                     // Send speech.config to Speech Service
-                    await websocketClient.SendAsync(buffer, WebSocketMessageType.Text, true, new CancellationToken());
+                    Console.WriteLine("Sending speech.config...");
+                    if (!IsWebSocketClientOpen(websocketClient)) return;
+                    await SendToWebSocket(websocketClient, buffer, false);
                     Console.WriteLine("speech.config sent successfully!");
 
                     // SENDING AUDIO TO SPEECH SERVICE:
@@ -184,10 +203,11 @@ namespace SpeechRecognitionService
                         var arrSeg = new ArraySegment<byte>(arr, 0, arr.Length);
 
                         Console.WriteLine($"Sending audio data from position: {cursor}");
-                        if (websocketClient.State != WebSocketState.Open) return;
+                        if (!IsWebSocketClientOpen(websocketClient)) return;
                         cursor += byteLen;
                         var end = cursor >= audioFileInfo.Length;
-                        await websocketClient.SendAsync(arrSeg, WebSocketMessageType.Binary, true, new CancellationToken());
+                        await SendToWebSocket(websocketClient, arrSeg, true);
+                        //await websocketClient.SendAsync(arrSeg, WebSocketMessageType.Binary, true, new CancellationToken());
                         Console.WriteLine($"Audio data from file {audioFilePath} sent successfully!");
 
                         var dt = Encoding.ASCII.GetString(arr);
@@ -197,20 +217,25 @@ namespace SpeechRecognitionService
                     headerBytes = BuildAudioHeader(requestId);
                     headerHead = CreateAudioHeaderHead(headerBytes);
                     var arrEnd = headerHead.Concat(headerBytes).ToArray();
-                    await websocketClient.SendAsync(new ArraySegment<byte>(arrEnd, 0, arrEnd.Length), WebSocketMessageType.Binary, true, new CancellationToken());
+                    await SendToWebSocket(websocketClient, new ArraySegment<byte>(arrEnd, 0, arrEnd.Length), true);
+                    //await websocketClient.SendAsync(new ArraySegment<byte>(arrEnd, 0, arrEnd.Length), WebSocketMessageType.Binary, true, new CancellationToken());
                     audioFileStream.Dispose();
                 });
 
+#if WINDOWS_UWP
+                await Task.WhenAll(sending);
+#else
                 // Wait for tasks to complete
                 await Task.WhenAll(sending, receiving);
-                if (sending.IsFaulted)
-                {
-                    var err = sending.Exception;
-                    throw err;
-                }
                 if (receiving.IsFaulted)
                 {
                     var err = receiving.Exception;
+                    throw err;
+                }
+#endif
+                if (sending.IsFaulted)
+                {
+                    var err = sending.Exception;
                     throw err;
                 }
 
@@ -223,30 +248,106 @@ namespace SpeechRecognitionService
             }
         }
 
-        private byte[] BuildAudioHeader(string requestid)
+#if WINDOWS_UWP
+        private async Task SendToWebSocket(MessageWebSocket client, ArraySegment<byte> buffer, bool isBinary)
         {
-            StringBuilder speechMsgBuilder = new StringBuilder();
-            // Clients use the audio message to send an audio chunk to the service.
-            speechMsgBuilder.Append("path:audio" + Environment.NewLine);
-            speechMsgBuilder.Append($"x-requestid:{requestid}" + Environment.NewLine);
-            speechMsgBuilder.Append($"x-timestamp:{DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffK")}" + Environment.NewLine);
-            speechMsgBuilder.Append($"content-type:audio/x-wav");
-
-            return Encoding.ASCII.GetBytes(speechMsgBuilder.ToString());
+            client.Control.MessageType = (isBinary ? SocketMessageType.Binary : SocketMessageType.Utf8);
+            using (var dataWriter = new DataWriter(client.OutputStream))
+            {
+                dataWriter.WriteBytes(buffer.Array);
+                await dataWriter.StoreAsync();
+                dataWriter.DetachStream();
+            }
         }
 
-        private byte[] CreateAudioHeaderHead(byte[] headerBytes)
+        private bool IsWebSocketClientOpen(MessageWebSocket client)
         {
-            var headerbuffer = new ArraySegment<byte>(headerBytes, 0, headerBytes.Length);
-            var str = "0x" + (headerBytes.Length).ToString("X");
-            var headerHeadBytes = BitConverter.GetBytes((UInt16)headerBytes.Length);
-            var isBigEndian = !BitConverter.IsLittleEndian;
-            var headerHead = !isBigEndian ? new byte[] { headerHeadBytes[1], headerHeadBytes[0] } : new byte[] { headerHeadBytes[0], headerHeadBytes[1] };
-            return headerHead;
+            return (client != null);
+        }
+
+        private void WebSocket_MessageReceived(MessageWebSocket sender, MessageWebSocketMessageReceivedEventArgs args)
+        {
+            try
+            {
+                SpeechServiceResult wssr;
+                using (DataReader dataReader = args.GetDataReader())
+                {
+                    dataReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+                    string resStr = dataReader.ReadString(dataReader.UnconsumedBufferLength);
+                    Console.WriteLine("Message received from MessageWebSocket: " + resStr);
+                    //this.messageWebSocket.Dispose();
+
+                    switch (args.MessageType)
+                    {
+                        // Incoming text messages can be hypotheses about the words the service recognized or the final
+                        // phrase, which is a recognition result that won't change.
+                        case SocketMessageType.Utf8:
+                            wssr = ParseWebSocketSpeechResult(resStr);
+                            Console.WriteLine(resStr + Environment.NewLine + "*** Message End ***" + Environment.NewLine);
+
+                            // Set the recognized text field in the client for future lookup, this can be stored
+                            // in either the Text property (for hypotheses) or DisplayText (for final phrases).
+                            if (wssr.Path == SpeechServiceResult.SpeechMessagePaths.SpeechHypothesis)
+                            {
+                                RecognizedText = wssr.Result.Text;
+                            }
+                            else if (wssr.Path == SpeechServiceResult.SpeechMessagePaths.SpeechPhrase)
+                            {
+                                RecognizedText = wssr.Result.DisplayText;
+                            }
+                            // Raise an event with the message we just received.
+                            // We also keep the last message received in case the client app didn't subscribe to the event.
+                            LastMessageReceived = wssr;
+                            if (OnMessageReceived != null)
+                            {
+                                OnMessageReceived.Invoke(wssr);
+                            }
+                            break;
+
+                        case SocketMessageType.Binary:
+                            Console.WriteLine("Binary messages are not suppported by this application.");
+                            break;
+
+                        //case WebSocketMessageType.Close:
+                        //    string description = client.CloseStatusDescription;
+                        //    Console.WriteLine($"Closing WebSocket with Status: {description}");
+                        //    await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                        //    isReceiving = false;
+                        //    break;
+
+                        default:
+                            Console.WriteLine("The WebSocket message type was not recognized.");
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //Windows.Web.WebErrorStatus webErrorStatus = WebSocketError.GetStatus(ex.GetBaseException().HResult);
+                Console.WriteLine("An exception occurred while receiving a message:" + Environment.NewLine + ex.Message);
+                // Add additional code here to handle exceptions.
+            }
+        }
+
+        private void WebSocket_Closed(Windows.Networking.Sockets.IWebSocket sender, Windows.Networking.Sockets.WebSocketClosedEventArgs args)
+        {
+            Console.WriteLine($"Closing WebSocket: Code: {args.Code}, Reason: {args.Reason}");
+            // Add additional code here to handle the WebSocket being closed.
+        }
+#else
+        private async Task SendToWebSocket(ClientWebSocket client, ArraySegment<byte> buffer, bool isBinary)
+        {
+            if (client.State != WebSocketState.Open) return;
+            await client.SendAsync(buffer, (isBinary ? WebSocketMessageType.Binary : WebSocketMessageType.Text), true, new CancellationToken());    
+        }
+
+        private bool IsWebSocketClientOpen(ClientWebSocket client)
+        {
+            return (client.State == WebSocketState.Open);
         }
 
         // Allows the WebSocket client to receive messages in a background task
-        private async Task Receiving(ClientWebSocket client)
+        private async Task Receiving(ClientWebSocket client)    
         {
             try
             {
@@ -255,8 +356,8 @@ namespace SpeechRecognitionService
 
                 while (isReceiving)
                 {
+                    var wsResult = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);    
 
-                    var wsResult = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
                     SpeechServiceResult wssr;
 
                     var resStr = Encoding.UTF8.GetString(buffer, 0, wsResult.Count);
@@ -310,6 +411,30 @@ namespace SpeechRecognitionService
                 Console.WriteLine("An exception occurred while receiving a message:" + Environment.NewLine + ex.Message);
             }
         }
+#endif
+
+        private byte[] BuildAudioHeader(string requestid)
+        {
+            StringBuilder speechMsgBuilder = new StringBuilder();
+            // Clients use the audio message to send an audio chunk to the service.
+            speechMsgBuilder.Append("path:audio" + Environment.NewLine);
+            speechMsgBuilder.Append($"x-requestid:{requestid}" + Environment.NewLine);
+            speechMsgBuilder.Append($"x-timestamp:{DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffK")}" + Environment.NewLine);
+            speechMsgBuilder.Append($"content-type:audio/x-wav");
+
+            return Encoding.ASCII.GetBytes(speechMsgBuilder.ToString());
+        }
+
+        private byte[] CreateAudioHeaderHead(byte[] headerBytes)
+        {
+            var headerbuffer = new ArraySegment<byte>(headerBytes, 0, headerBytes.Length);
+            var str = "0x" + (headerBytes.Length).ToString("X");
+            var headerHeadBytes = BitConverter.GetBytes((UInt16)headerBytes.Length);
+            var isBigEndian = !BitConverter.IsLittleEndian;
+            var headerHead = !isBigEndian ? new byte[] { headerHeadBytes[1], headerHeadBytes[0] } : new byte[] { headerHeadBytes[0], headerHeadBytes[1] };
+            return headerHead;
+        }
+
         public static UInt16 ReverseBytes(UInt16 value)
         {
             return (UInt16)((value & 0xFFU) << 8 | (value & 0xFF00U) >> 8);

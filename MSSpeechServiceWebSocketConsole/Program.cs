@@ -62,19 +62,21 @@ namespace MSSpeechServiceWebSocketConsole
                     // Create an Azure Cognitive Services Account: https://docs.microsoft.com/azure/cognitive-services/cognitive-services-apis-create-account
 
                     // DELETE THE NEXT THREE LINE ONCE YOU HAVE OBTAINED YOUR OWN SPEECH API KEY
-                    Console.WriteLine("You forgot to initialize the sample with your own Speech API key. Visit https://azure.microsoft.com/try/cognitive-services to get started.");
-                    Console.ReadLine();
-                    return;
+                    //Console.WriteLine("You forgot to initialize the sample with your own Speech API key. Visit https://azure.microsoft.com/try/cognitive-services to get started.");
+                    //Console.ReadLine();
+                    //return;
                     // END DELETE
 #if USENEWSPEECHSDK
                     bool useClassicBingSpeechService = false;
-                    string authenticationKey = @"INSERT-YOUR-NEW-SPEECH-API-KEY-HERE";
+                    //string authenticationKey = @"INSERT-YOUR-NEW-SPEECH-API-KEY-HERE";
+                    string authenticationKey = @"895664ef53e44b6fac574c3ecd6f3b75";
 #else
                     bool useClassicBingSpeechService = true;
-                    string authenticationKey = @"INSERT-YOUR-BING-SPEECH-API-KEY-HERE";
+                    //string authenticationKey = @"INSERT-YOUR-BING-SPEECH-API-KEY-HERE";
+                    string authenticationKey = @"4d5a1beefe364f8986d63a877ebd51d5";
 #endif
 
-                    var recoServiceClient = new SpeechRecognitionClient(useClassicBingSpeechService);
+                     var recoServiceClient = new SpeechRecognitionClient(useClassicBingSpeechService);
                     // Replace this with your own file. Add it to the project and mark it as "Content" and "Copy if newer".
                     string audioFilePath = @"Thisisatest.wav";
 

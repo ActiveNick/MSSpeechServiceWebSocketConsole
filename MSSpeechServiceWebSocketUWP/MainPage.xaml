@@ -1,0 +1,30 @@
+﻿<Page
+    x:Class="MSSpeechServiceWebSocketUWP.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MSSpeechServiceWebSocketUWP"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid>
+        <StackPanel Margin="12">
+            <TextBlock Text="Microsoft Speech Recognition WebSockets Sample for UWP" Style="{ThemeResource HeaderTextBlockStyle}" Margin="12"/>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Filename to upload for Speech Recognition:" Style="{ThemeResource BodyTextBlockStyle}" Margin="12"/>
+                <TextBox x:Name="txtFilename" Text="Thisisatest.wav" Width="350" HorizontalAlignment="Left" Margin="12"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Azure region of your Cognitive Services Speech API:" Style="{ThemeResource BodyTextBlockStyle}" Margin="12"/>
+                <TextBox x:Name="txtRegion" Text="westus" Width="298" HorizontalAlignment="Left" Margin="12"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Cognitive Services Speech API Subscription Key:" Style="{ThemeResource BodyTextBlockStyle}" Margin="12"/>
+                <TextBox x:Name="txtSubscriptionKey" Text="895664ef53e44b6fac574c3ecd6f3b75" Width="325" HorizontalAlignment="Left" Margin="12"/>
+            </StackPanel>
+            <Button x:Name="btnStart" Content="Start Speech Recognition" Width="250" Margin="12" Click="btnStart_Click"/>
+            <TextBlock x:Name="lblResult" Text="(Speech recognition results will be shown here.)" HorizontalAlignment="Stretch" TextWrapping="Wrap" Height="300" Margin="12" />
+        </StackPanel>
+    </Grid>
+</Page>
